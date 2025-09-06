@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Encoder / Decryptor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .tab-button.active {
+            border-bottom-color: #3b82f6; /* blue-500 */
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-2xl mx-auto p-8 bg-gray-800 rounded-2xl shadow-2xl space-y-6">
+        <div>
+            <h1 class="text-4xl font-bold text-center text-white">Multi-Encoder / Decryptor</h1>
+            <p class="text-center text-gray-400 mt-2">Switch between classic ciphers and modern encryption.</p>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-700">
+            <button id="tab1" class="tab-button flex-1 py-3 text-lg font-semibold border-b-2 active">Stage 1: Classic Ciphers</button>
+            <button id="tab2" class="tab-button flex-1 py-3 text-lg font-semibold border-b-2 border-transparent text-gray-400 hover:text-white">Stage 2: AES-256</button>
+        </div>
+
+        <!-- Input Section -->
+        <div class="space-y-2">
+            <label for="inputText" class="block text-lg font-medium text-gray-300">Input Text:</label>
+            <textarea id="inputText" rows="5" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-lg focus:ring-4 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-white placeholder-gray-400" placeholder="Type or paste your text here..."></textarea>
+        </div>
+
+        <!-- Stage 2 Specific Inputs -->
+        <div id="stage2-inputs" class="hidden space-y-2">
+            <label for="secretKey" class="block text-lg font-medium text-gray-300">Secret Key:</label>
+            <input type="password" id="secretKey" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-4 focus:ring-blue-500/50 focus:border-blue-500 text-white" placeholder="Enter your secret key for AES">
+        </div>
+
+        <!-- Buttons Section -->
+        <div id="stage1-buttons" class="flex justify-center space-x-4">
+            <button id="encodeButton" class="w-full px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500/50">
+                Encode
+            </button>
+            <button id="decodeButton" class="w-full px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-green-500/50">
+                Decrypt
+            </button>
+        </div>
+        <div id="stage2-buttons" class="hidden flex justify-center space-x-4">
+            <button id="aesEncryptButton" class="w-full px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500/50">
+                AES Encrypt
+            </button>
+            <button id="aesDecryptButton" class="w-full px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-green-500/50">
+                AES Decrypt
+            </button>
+        </div>
+
+        <!-- Output Section -->
+        <div class="space-y-4">
+            <h2 class="text-2xl font-semibold text-white">Result:</h2>
+            <div id="output" class="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg min-h-[120px] whitespace-pre-wrap break-words font-mono text-gray-300"></div>
+            <div class="flex justify-center mt-4">
+                <button id="copyButton" class="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg shadow-md transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-gray-500/50 hidden">
+                    Copy to Clipboard
+                </button>
+            </div>
+        </div>
+        <div id="copy-message" class="text-center text-green-400 opacity-0 transition-opacity duration-300 -mt-2">Copied to clipboard!</div>
+    </div>
+
+    <script>
+        // --- Morse Code Maps ---
+        const morseCodeMap = {
+            'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.', 'G': '--.', 'H': '....', 'I': '..', 'J': '.---',
+            'K': '-.-', 'L': '.-..', 'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.', 'S': '...', 'T': '-',
+            'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-', 'Y': '-.--', 'Z': '--..',
+            '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----',
+            ' ': '/', '=': '-...-'
+        };
+        const reverseMorseCodeMap = Object.fromEntries(Object.entries(morseCodeMap).map(([k, v]) => [v, k]));
+
+        // --- DOM Elements ---
+        const inputText = document.getElementById('inputText');
+        const outputDiv = document.getElementById('output');
+        const copyButton = document.getElementById('copyButton');
+        const copyMessage = document.getElementById('copy-message');
+        const secretKeyInput = document.getElementById('secretKey');
+
+        // Tabs
+        const tab1 = document.getElementById('tab1');
+        const tab2 = document.getElementById('tab2');
+        const stage1Buttons = document.getElementById('stage1-buttons');
+        const stage2Buttons = document.getElementById('stage2-buttons');
+        const stage2Inputs = document.getElementById('stage2-inputs');
+        
+        // Buttons
+        const encodeButton = document.getElementById('encodeButton');
+        const decodeButton = document.getElementById('decodeButton');
+        const aesEncryptButton = document.getElementById('aesEncryptButton');
+        const aesDecryptButton = document.getElementById('aesDecryptButton');
+
+        // --- Tab Switching Logic ---
+        tab1.addEventListener('click', () => {
+            tab1.classList.add('active');
+            tab2.classList.remove('active');
+            stage1Buttons.classList.remove('hidden');
+            stage2Buttons.classList.add('hidden');
+            stage2Inputs.classList.add('hidden');
+        });
+
+        tab2.addEventListener('click', () => {
+            tab2.classList.add('active');
+            tab1.classList.remove('active');
+            stage2Buttons.classList.remove('hidden');
+            stage1Buttons.classList.add('hidden');
+            stage2Inputs.classList.remove('hidden');
+        });
+
+        // --- STAGE 1: Classic Ciphers ---
+        encodeButton.addEventListener('click', () => {
+            const text = inputText.value;
+            if (!text) {
+                outputDiv.textContent = 'Please enter some text to encode.';
+                copyButton.classList.add('hidden');
+                return;
+            }
+            try {
+                // Step 1: Base64
+                const base64Encoded = btoa(text);
+                // Step 2: Morse Code
+                const morseEncoded = textToMorse(base64Encoded);
+                // Step 3: Hexadecimal
+                const hexEncoded = stringToHex(morseEncoded);
+
+                outputDiv.textContent = hexEncoded;
+                copyButton.classList.remove('hidden');
+            } catch (error) {
+                console.error("Encoding Error:", error);
+                outputDiv.textContent = "An error occurred during encoding.";
+                copyButton.classList.add('hidden');
+            }
+        });
+
+        decodeButton.addEventListener('click', () => {
+            const text = inputText.value;
+            if (!text) {
+                outputDiv.textContent = 'Please enter some text to decrypt.';
+                copyButton.classList.add('hidden');
+                return;
+            }
+            try {
+                // Step 1: Hex to String
+                const textDecoded = hexToString(text);
+                // Step 2: Morse to Text
+                const morseDecoded = morseToText(textDecoded);
+                // Step 3: Base64 to Text
+                const finalOutput = atob(morseDecoded);
+
+                outputDiv.textContent = finalOutput;
+                copyButton.classList.remove('hidden');
+            } catch (error) {
+                console.error("Decryption Error:", error);
+                outputDiv.textContent = "Decryption failed. The input text may be invalid or corrupted.";
+                copyButton.classList.add('hidden');
+            }
+        });
+
+
+        // --- STAGE 2: AES-256 ---
+        aesEncryptButton.addEventListener('click', () => {
+            const text = inputText.value;
+            const key = secretKeyInput.value;
+            if (!text || !key) {
+                outputDiv.textContent = 'Please provide both text and a secret key.';
+                copyButton.classList.add('hidden');
+                return;
+            }
+            try {
+                const hashedKey = CryptoJS.SHA256(key);
+                const encrypted = CryptoJS.AES.encrypt(text, hashedKey, {
+                    mode: CryptoJS.mode.ECB,
+                    padding: CryptoJS.pad.Pkcs7
+                });
+                outputDiv.textContent = encrypted.toString();
+                copyButton.classList.remove('hidden');
+            } catch (error) {
+                console.error("AES Encryption Error:", error);
+                outputDiv.textContent = "An error occurred during AES encryption.";
+                copyButton.classList.add('hidden');
+            }
+        });
+
+        aesDecryptButton.addEventListener('click', () => {
+            const ciphertext = inputText.value;
+            const key = secretKeyInput.value;
+            if (!ciphertext || !key) {
+                outputDiv.textContent = 'Please provide both encrypted text and the secret key.';
+                copyButton.classList.add('hidden');
+                return;
+            }
+            try {
+                const hashedKey = CryptoJS.SHA256(key);
+                const bytes = CryptoJS.AES.decrypt(ciphertext, hashedKey, {
+                     mode: CryptoJS.mode.ECB,
+                     padding: CryptoJS.pad.Pkcs7
+                });
+                const originalText = bytes.toString(CryptoJS.enc.Utf8);
+                if (originalText) {
+                    outputDiv.textContent = originalText;
+                } else {
+                    throw new Error("Decryption resulted in empty text. Wrong key or corrupted data.");
+                }
+                copyButton.classList.remove('hidden');
+            } catch (error) {
+                console.error("AES Decryption Error:", error);
+                outputDiv.textContent = "AES Decryption failed. Please check your key and input text.";
+                copyButton.classList.add('hidden');
+            }
+        });
+
+        // --- Copy Button ---
+        copyButton.addEventListener('click', () => {
+            const textToCopy = outputDiv.textContent;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textToCopy;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            try {
+                document.execCommand('copy');
+                copyMessage.classList.remove('opacity-0');
+                setTimeout(() => { copyMessage.classList.add('opacity-0'); }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+            }
+            document.body.removeChild(tempTextArea);
+        });
+        
+        // --- Helper Functions ---
+        function textToMorse(str) {
+            return str.toUpperCase().split('').map(char => morseCodeMap[char] || '').join(' ');
+        }
+        
+        function morseToText(morseStr) {
+            return morseStr.split(' ').map(code => reverseMorseCodeMap[code] || '').join('');
+        }
+
+        function stringToHex(str) {
+            return str.split('').map(c => c.charCodeAt(0).toString(16)).join('');
+        }
+        
+        function hexToString(hexStr) {
+            let str = '';
+            for (let i = 0; i < hexStr.length; i += 2) {
+                const hexPart = hexStr.substr(i, 2);
+                // Ensure the hex part is not empty, which can happen with odd-length strings
+                if (hexPart) {
+                    str += String.fromCharCode(parseInt(hexPart, 16));
+                }
+            }
+            return str;
+        }
+
+    </script>
+</body>
+</html>
+
